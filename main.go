@@ -1,27 +1,39 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 type Node struct {
-	children []*Node
-	data     interface{}
+	Children []*Node
+	Data     interface{}
 }
 
 func main() {
-	dir := "c:\\inetpub"
+	dir := os.Args[1]
+	fileName := os.Args[2]
 	node := &Node{}
 
 	err := walk(dir, node, getFileData)
 	if err != nil {
 		fmt.Println(err)
 	} else {
-		printNode(node)
+		//printNode(node)
+		b, errJSON := getJSON(node)
+		fmt.Println(b)
+		if errJSON != nil {
+			panic(errJSON)
+		}
+		errFile := writeFileToCurrentDir(b, fileName)
+		if errFile != nil {
+			panic(errFile)
+		}
 	}
 }
 
@@ -45,10 +57,10 @@ func walk(dir string, node *Node, fnData func(os.FileInfo, error) interface{}) (
 			childErr = walk(path.Join(dir, fileInfo.Name()), childNode, fnData)
 		}
 		if fnData != nil {
-			childNode.data = fnData(fileInfo, childErr)
+			childNode.Data = fnData(fileInfo, childErr)
 		}
 		if childNode != nil {
-			node.children = append(node.children, childNode)
+			node.Children = append(node.Children, childNode)
 		}
 	}
 	return
@@ -73,17 +85,28 @@ func printNode(node *Node) {
 		return
 	}
 
-	if dataMap, mapOk := node.data.(map[string]interface{}); mapOk {
+	if dataMap, mapOk := node.Data.(map[string]interface{}); mapOk {
 		if name, nameOk := dataMap["Name"]; nameOk {
 			fmt.Println(name)
 		}
 	}
 
-	if node.children == nil {
+	if node.Children == nil {
 		return
 	}
 
-	for _, child := range node.children {
+	for _, child := range node.Children {
 		printNode(child)
 	}
+}
+
+func getJSON(node *Node) (b []byte, err error) {
+	b, err = json.Marshal(node)
+	return
+}
+
+func writeFileToCurrentDir(json []byte, fileName string) (err error) {
+	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	err = ioutil.WriteFile(path.Join(dir, fileName), json, 0644)
+	return
 }
