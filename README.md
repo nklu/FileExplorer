@@ -1,2 +1,2 @@
 # FileExplorer
-Simple File Exploere
+Simple File and Directory Explorer
