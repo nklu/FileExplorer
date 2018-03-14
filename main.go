@@ -11,16 +11,15 @@ import (
 )
 
 type Node struct {
+	Data     map[string]interface{}
 	Children []*Node
-	Data     interface{}
 }
 
 func main() {
 	dir := os.Args[1]
 	fileName := os.Args[2]
-	node := &Node{}
 
-	err := walk(dir, node, getFileData)
+	node, err, _ := walk(dir, getFileData)
 	if err != nil {
 		fmt.Println(err)
 	} else {
@@ -37,12 +36,10 @@ func main() {
 	}
 }
 
-func walk(dir string, node *Node, fnData func(os.FileInfo, error) interface{}) (err error) {
-	if node == nil {
-		return errors.New("Cannot Be Nil")
-	}
+func walk(dir string, fnData func(os.FileInfo, error) (map[string]interface{}, int64)) (node *Node, err error, size int64) {
+
 	if dir == "" {
-		return errors.New("Directory is empty")
+		return node, errors.New("Directory is empty"), size
 	}
 
 	info, err := ioutil.ReadDir(dir)
@@ -50,34 +47,53 @@ func walk(dir string, node *Node, fnData func(os.FileInfo, error) interface{}) (
 		return
 	}
 
+	node = &Node{}
+
 	for _, fileInfo := range info {
-		childNode := &Node{}
+		var childNode *Node
 		var childErr error
-		if fileInfo.IsDir() {
-			childErr = walk(path.Join(dir, fileInfo.Name()), childNode, fnData)
-		}
+		var childSize int64
+		var childData map[string]interface{}
 		if fnData != nil {
-			childNode.Data = fnData(fileInfo, childErr)
+			childData, childSize = fnData(fileInfo, childErr)
+		}
+		if fileInfo.IsDir() {
+			childNode, childErr, childSize = walk(path.Join(dir, fileInfo.Name()), fnData)
+			if childData != nil {
+				childData["Size"] = childSize
+			}
+			childNode.Data = childData
+		} else {
+			childNode = &Node{Data: childData}
 		}
 		if childNode != nil {
 			node.Children = append(node.Children, childNode)
 		}
+		size += childSize
 	}
+
+	if node.Data == nil {
+		node.Data = map[string]interface{}{}
+		node.Data["Name"] = dir
+		node.Data["Size"] = size
+	}
+
 	return
 }
 
-func getFileData(info os.FileInfo, err error) interface{} {
+func getFileData(info os.FileInfo, err error) (map[string]interface{}, int64) {
 	if info == nil {
-		return nil
+		return nil, 0
 	}
 
 	ret := map[string]interface{}{}
 
 	ret["Name"] = info.Name()
-	ret["Size"] = info.Size()
 	ret["IsDir"] = info.IsDir()
+	size := info.Size()
+	ret["Size"] = size
 
-	return ret
+	return ret, size
 }
 
 func printNode(node *Node) {
@@ -85,10 +101,8 @@ func printNode(node *Node) {
 		return
 	}
 
-	if dataMap, mapOk := node.Data.(map[string]interface{}); mapOk {
-		if name, nameOk := dataMap["Name"]; nameOk {
-			fmt.Println(name)
-		}
+	if name, nameOk := node.Data["Name"]; nameOk {
+		fmt.Println(name)
 	}
 
 	if node.Children == nil {
