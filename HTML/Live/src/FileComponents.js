@@ -9,7 +9,7 @@ const PlusMinusButton = ({ open, onClick }) =>
   );
 
 const DisplayName = ({ name }) => <div>{name}</div>
-const DisplaySize = ({ size }) => <div>{size}</div>
+const DisplaySize = ({ size }) => <div>{bytesToSize(size)}</div>
 const DisplaySizePercentage = ({ size, parentSize }) => <div>{((size / parentSize) * 100).toFixed(2)}%</div>
 const DisplayDirectory = ({ isDir }) => <div>{isDir ? "True" : "False"}</div>
 const DisplayExpandibleName = ({ name, open, onClick, hasChildren, margin }) => (
@@ -47,7 +47,7 @@ const DisplayData = ({ data, hasChildren, open, onClick, margin, parentSize }) =
 }
 
 
-export class FileInfo extends Component {
+class FileInfo extends Component {
 
   state = { open: false }
 
@@ -81,7 +81,7 @@ export class FileInfo extends Component {
   }
 }
 
-export const FileInfoHeader = () => (
+const FileInfoHeader = () => (
   <tr>
     <th>Name</th>
     <th>Size</th>
@@ -89,3 +89,13 @@ export const FileInfoHeader = () => (
     <th>Dir</th>
   </tr>
 );
+
+export {FileInfo, FileInfoHeader};
+
+// https://stackoverflow.com/questions/15900485/correct-way-to-convert-size-in-bytes-to-kb-mb-gb-in-javascript
+const bytesToSize = (bytes) => {
+  var sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes === 0) return '0 Byte';
+  var i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)),10);
+  return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
+};
