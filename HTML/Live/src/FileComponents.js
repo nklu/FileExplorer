@@ -8,9 +8,10 @@ const PlusMinusButton = ({ open, onClick }) =>
     </button>
   );
 
-const DisplayName = ({ name }) => (<div>{name}</div>)
-const DisplaySize = ({ size }) => (<div>{size}</div>)
-const DisplayDirectory = ({ isDir }) => (<div>{isDir ? "True" : "False"}</div>)
+const DisplayName = ({ name }) => <div>{name}</div>
+const DisplaySize = ({ size }) => <div>{size}</div>
+const DisplaySizePercentage = ({ size, parentSize }) => <div>{((size / parentSize) * 100).toFixed(2)}%</div>
+const DisplayDirectory = ({ isDir }) => <div>{isDir ? "True" : "False"}</div>
 const DisplayExpandibleName = ({ name, open, onClick, hasChildren, margin }) => (
   <div style={{ marginLeft: margin, display: "flex" }}>
     {hasChildren && <PlusMinusButton open={open} onClick={onClick} />}
@@ -18,7 +19,7 @@ const DisplayExpandibleName = ({ name, open, onClick, hasChildren, margin }) => 
   </div>
 );
 
-const DisplayData = ({ data, hasChildren, open, onClick, margin }) => {
+const DisplayData = ({ data, hasChildren, open, onClick, margin, parentSize }) => {
   if (data) {
     return (
       <tr  >
@@ -33,6 +34,9 @@ const DisplayData = ({ data, hasChildren, open, onClick, margin }) => {
         </td>
         <td>
           <DisplaySize size={data.Size} />
+        </td>
+        <td>
+          <DisplaySizePercentage size={data.Size} parentSize={parentSize} />
         </td>
         <td>
           <DisplayDirectory isDir={data.IsDir} />
@@ -53,9 +57,12 @@ export class FileInfo extends Component {
   }
 
   render() {
-    const { Data, Children, margin } = this.props;
+    const { Data, Children, margin, parentSize } = this.props;
     const { open } = this.state;
     const hasChildren = Children && Children.length > 0;
+    const sortedChildren = (Children && Children.sort((a, b) => b.Data.Size - a.Data.Size)) || [];
+    const topParentSize = parentSize || Data.Size;
+
     return [
       <DisplayData
         key={1}
@@ -63,11 +70,22 @@ export class FileInfo extends Component {
         open={open}
         onClick={this.handleButtonClick.bind(this)}
         margin={margin}
-        hasChildren={hasChildren} />,
+        hasChildren={hasChildren}
+        parentSize={topParentSize}
+      />,
       open &&
-      Children &&
-      Children.map(child => <FileInfo key={child.Data.Name} {...child} margin={margin + 10} />)
+      sortedChildren.map(child =>
+        <FileInfo key={child.Data.Name} {...child} margin={margin + 10} parentSize={Data.Size} />
+      )
     ];
   }
 }
 
+export const FileInfoHeader = () => (
+  <tr>
+    <th>Name</th>
+    <th>Size</th>
+    <th>Size Percent</th>
+    <th>Dir</th>
+  </tr>
+);

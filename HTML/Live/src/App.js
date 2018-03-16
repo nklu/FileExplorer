@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import './App.css';
 import json from './test.json';
-import {FileInfo} from './FileComponents';
+import {FileInfo, FileInfoHeader} from './FileComponents';
 
 class App extends Component {
 
@@ -13,11 +13,7 @@ class App extends Component {
         Test Stuff Here
         <table style={{ width: 100 }}  >
           <thead>
-            <tr>
-              <th>Name</th>
-              <th>Size</th>
-              <th>Dir</th>
-            </tr>
+            <FileInfoHeader />
           </thead>
           <tbody>
             <FileInfo {...this.state.json} margin={0} key={"base"} />
