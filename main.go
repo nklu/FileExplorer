@@ -15,16 +15,22 @@ type Node struct {
 	Children []*Node
 }
 
+type WalkResult struct {
+	Node  *Node
+	Error error
+	Size  int64
+}
+
 func main() {
 	dir := os.Args[1]
 	fileName := os.Args[2]
 
-	node, err, _ := walk(dir, getFileData)
-	if err != nil {
-		fmt.Println(err)
+	result := walk(dir, getFileData)
+	if result.Error != nil {
+		fmt.Println(result.Error)
 	} else {
 		//printNode(node)
-		b, errJSON := getJSON(node)
+		b, errJSON := getJSON(result.Node)
 		fmt.Println(b)
 		if errJSON != nil {
 			panic(errJSON)
@@ -36,52 +42,53 @@ func main() {
 	}
 }
 
-func walk(dir string, fnData func(os.FileInfo, error) (map[string]interface{}, int64)) (node *Node, err error, size int64) {
+func walk(dir string, fnData func(os.FileInfo) (map[string]interface{}, int64)) *WalkResult {
+	walkResult := &WalkResult{}
 
 	if dir == "" {
-		return node, errors.New("Directory is empty"), size
+		walkResult.Error = errors.New("Directory is empty")
+		return walkResult
 	}
 
 	info, err := ioutil.ReadDir(dir)
 	if err != nil {
-		return
+		walkResult.Error = err
+		return walkResult
 	}
-
-	node = &Node{}
+	walkResult.Node = &Node{}
 
 	for _, fileInfo := range info {
-		var childNode *Node
-		var childErr error
+		var childResult *WalkResult
 		var childSize int64
 		var childData map[string]interface{}
 		if fnData != nil {
-			childData, childSize = fnData(fileInfo, childErr)
+			childData, childSize = fnData(fileInfo)
 		}
 		if fileInfo.IsDir() {
-			childNode, childErr, childSize = walk(path.Join(dir, fileInfo.Name()), fnData)
+			childResult = walk(path.Join(dir, fileInfo.Name()), fnData)
 			if childData != nil {
-				childData["Size"] = childSize
+				childData["Size"] = childResult.Size
 			}
-			childNode.Data = childData
+			childResult.Node.Data = childData
 		} else {
-			childNode = &Node{Data: childData}
+			childResult = &WalkResult{Node: &Node{Data: childData}}
 		}
-		if childNode != nil {
-			node.Children = append(node.Children, childNode)
+		if childResult.Node != nil {
+			walkResult.Node.Children = append(walkResult.Node.Children, childResult.Node)
 		}
-		size += childSize
+		walkResult.Size += childSize
 	}
 
-	if node.Data == nil {
-		node.Data = map[string]interface{}{}
-		node.Data["Name"] = dir
-		node.Data["Size"] = size
+	if walkResult.Node.Data == nil {
+		walkResult.Node.Data = map[string]interface{}{}
+		walkResult.Node.Data["Name"] = dir
+		walkResult.Node.Data["Size"] = walkResult.Size
 	}
 
-	return
+	return walkResult
 }
 
-func getFileData(info os.FileInfo, err error) (map[string]interface{}, int64) {
+func getFileData(info os.FileInfo) (map[string]interface{}, int64) {
 	if info == nil {
 		return nil, 0
 	}
