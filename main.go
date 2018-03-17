@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -19,17 +20,21 @@ type Node struct {
 	Children []*Node
 }
 
-type WalkResult struct {
-	Node  *Node
-	Error error
-	Size  int64
+type syncHelp struct {
+	Wg  *sync.WaitGroup
+	Mtx *sync.Mutex
 }
 
 func main() {
 	dir := os.Args[1]
 	fileName := os.Args[2]
 
-	result, err := walk(dir, nil)
+	syncHelp := &syncHelp{Wg: &sync.WaitGroup{}, Mtx: &sync.Mutex{}}
+
+	result, err := walk(dir, nil, syncHelp)
+
+	syncHelp.Wg.Wait()
+
 	if err != nil {
 		panic(err)
 	}
@@ -47,7 +52,9 @@ func main() {
 	fmt.Println("Successful")
 }
 
-func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}) (node *Node, err error) {
+func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}, syncHelp *syncHelp) (node *Node, err error) {
+	syncHelp.Wg.Add(1)
+	defer syncHelp.Wg.Done()
 
 	info, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -59,7 +66,9 @@ func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}) (node *N
 		var childNode *Node
 		if fileInfo.IsDir() {
 			fullPath := path.Join(dir, fileInfo.Name())
-			childNode, _ = walk(fullPath, fnData)
+			go func() {
+				childNode, _ = walk(fullPath, fnData, syncHelp)
+			}()
 			if childNode == nil {
 				continue
 			}
@@ -72,7 +81,9 @@ func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}) (node *N
 			childNode.Data = fnData(fileInfo)
 		}
 		node.Size += childNode.Size
+		syncHelp.Mtx.Lock()
 		node.Children = append(node.Children, childNode)
+		syncHelp.Mtx.Unlock()
 	}
 
 	return
