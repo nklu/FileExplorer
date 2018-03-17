@@ -2,16 +2,20 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 )
 
 type Node struct {
-	Data     map[string]interface{}
+	Size     int64
+	IsDir    bool
+	Name     string
+	Modified time.Time
+	Data     *map[string]interface{}
 	Children []*Node
 }
 
@@ -25,92 +29,69 @@ func main() {
 	dir := os.Args[1]
 	fileName := os.Args[2]
 
-	result := walk(dir, getFileData)
-	if result.Error != nil {
-		fmt.Println(result.Error)
-	} else {
-		//printNode(node)
-		b, errJSON := getJSON(result.Node)
-		fmt.Println(b)
-		if errJSON != nil {
-			panic(errJSON)
-		}
-		errFile := writeFileToCurrentDir(b, fileName)
-		if errFile != nil {
-			panic(errFile)
-		}
+	result, err := walk(dir, nil)
+	if err != nil {
+		panic(err)
 	}
+
+	b, errJSON := getJSON(result)
+	if errJSON != nil {
+		panic(errJSON)
+	}
+
+	errFile := writeFileToCurrentDir(b, fileName)
+	if errFile != nil {
+		panic(errFile)
+	}
+
+	fmt.Println("Successful")
 }
 
-func walk(dir string, fnData func(os.FileInfo) (map[string]interface{}, int64)) *WalkResult {
-	walkResult := &WalkResult{}
-
-	if dir == "" {
-		walkResult.Error = errors.New("Directory is empty")
-		return walkResult
-	}
+func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}) (node *Node, err error) {
 
 	info, err := ioutil.ReadDir(dir)
 	if err != nil {
-		walkResult.Error = err
-		return walkResult
+		return
 	}
-	walkResult.Node = &Node{}
+	node = &Node{Name: dir}
 
 	for _, fileInfo := range info {
-		var childResult *WalkResult
-		var childSize int64
-		var childData map[string]interface{}
-		if fnData != nil {
-			childData, childSize = fnData(fileInfo)
-		}
+		var childNode *Node
 		if fileInfo.IsDir() {
-			childResult = walk(path.Join(dir, fileInfo.Name()), fnData)
-			if childData != nil {
-				childData["Size"] = childResult.Size
+			fullPath := path.Join(dir, fileInfo.Name())
+			childNode, _ = walk(fullPath, fnData)
+			if childNode == nil {
+				continue
 			}
-			childResult.Node.Data = childData
 		} else {
-			childResult = &WalkResult{Node: &Node{Data: childData}}
+			childNode = &Node{}
 		}
-		if childResult.Node != nil {
-			walkResult.Node.Children = append(walkResult.Node.Children, childResult.Node)
+
+		childNode.GetFileBaseData(fileInfo)
+		if fnData != nil {
+			childNode.Data = fnData(fileInfo)
 		}
-		walkResult.Size += childSize
+		node.Size += childNode.Size
+		node.Children = append(node.Children, childNode)
 	}
 
-	if walkResult.Node.Data == nil {
-		walkResult.Node.Data = map[string]interface{}{}
-		walkResult.Node.Data["Name"] = dir
-		walkResult.Node.Data["Size"] = walkResult.Size
-	}
-
-	return walkResult
+	return
 }
 
-func getFileData(info os.FileInfo) (map[string]interface{}, int64) {
-	if info == nil {
-		return nil, 0
+func (node *Node) GetFileBaseData(info os.FileInfo) {
+	node.IsDir = info.IsDir()
+	node.Name = info.Name()
+	node.Modified = info.ModTime()
+	if !node.IsDir {
+		node.Size = info.Size()
 	}
-
-	ret := map[string]interface{}{}
-
-	ret["Name"] = info.Name()
-	ret["IsDir"] = info.IsDir()
-	size := info.Size()
-	ret["Size"] = size
-
-	return ret, size
 }
 
 func printNode(node *Node) {
 	if node == nil {
 		return
 	}
-
-	if name, nameOk := node.Data["Name"]; nameOk {
-		fmt.Println(name)
-	}
+	fmt.Println(node.Name)
 
 	if node.Children == nil {
 		return
