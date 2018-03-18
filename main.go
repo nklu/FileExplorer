@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -28,12 +29,23 @@ type syncHelp struct {
 func main() {
 	dir := os.Args[1]
 	fileName := os.Args[2]
+	var doSync bool
+	var argErr error
+	if doSync, argErr = strconv.ParseBool(os.Args[3]); argErr != nil {
+		doSync = false
+	}
 
-	syncHelp := &syncHelp{Wg: &sync.WaitGroup{}, Mtx: &sync.Mutex{}}
+	var result *Node
+	var err error
 
-	result, err := walk(dir, nil, syncHelp)
-
-	syncHelp.Wg.Wait()
+	if doSync {
+		result, err = walkSync(dir, nil)
+	} else {
+		var wg sync.WaitGroup
+		result, err = walk(dir, &wg, nil)
+		wg.Wait()
+		fmt.Println("Async")
+	}
 
 	if err != nil {
 		panic(err)
@@ -52,9 +64,48 @@ func main() {
 	fmt.Println("Successful")
 }
 
-func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}, syncHelp *syncHelp) (node *Node, err error) {
-	syncHelp.Wg.Add(1)
-	defer syncHelp.Wg.Done()
+var mtx sync.Mutex
+
+func walk(dir string, wg *sync.WaitGroup, fnData func(os.FileInfo) *map[string]interface{}) (node *Node, err error) {
+
+	info, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	node = &Node{Name: dir}
+	for _, fileInfo := range info {
+		if fileInfo.IsDir() {
+			wg.Add(1)
+			go func(curNode *Node, curInfo os.FileInfo) {
+				fullPath := path.Join(dir, curInfo.Name())
+				childNode, _ := walk(fullPath, wg, fnData)
+				addNodeAndData(curNode, childNode, curInfo)
+				wg.Done()
+			}(node, fileInfo)
+		} else {
+			childNode := &Node{}
+			addNodeAndData(node, childNode, fileInfo)
+		}
+	}
+	return
+}
+
+func addNodeAndData(parentNode *Node, childNode *Node, fileInfo os.FileInfo) {
+	childNode.getFileBaseData(fileInfo)
+	mtx.Lock()
+	parentNode.Size += childNode.Size
+	parentNode.Children = append(parentNode.Children, childNode)
+	mtx.Unlock()
+}
+
+func (node *Node) getSize(mtx *sync.Mutex) (size int64) {
+	mtx.Lock()
+	size = node.Size
+	mtx.Unlock()
+	return
+}
+
+func walkSync(dir string, fnData func(os.FileInfo) *map[string]interface{}) (node *Node, err error) {
 
 	info, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -66,9 +117,7 @@ func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}, syncHelp
 		var childNode *Node
 		if fileInfo.IsDir() {
 			fullPath := path.Join(dir, fileInfo.Name())
-			go func() {
-				childNode, _ = walk(fullPath, fnData, syncHelp)
-			}()
+			childNode, _ = walkSync(fullPath, fnData)
 			if childNode == nil {
 				continue
 			}
@@ -76,20 +125,18 @@ func walk(dir string, fnData func(os.FileInfo) *map[string]interface{}, syncHelp
 			childNode = &Node{}
 		}
 
-		childNode.GetFileBaseData(fileInfo)
+		childNode.getFileBaseData(fileInfo)
 		if fnData != nil {
 			childNode.Data = fnData(fileInfo)
 		}
 		node.Size += childNode.Size
-		syncHelp.Mtx.Lock()
 		node.Children = append(node.Children, childNode)
-		syncHelp.Mtx.Unlock()
 	}
 
 	return
 }
 
-func (node *Node) GetFileBaseData(info os.FileInfo) {
+func (node *Node) getFileBaseData(info os.FileInfo) {
 	node.IsDir = info.IsDir()
 	node.Name = info.Name()
 	node.Modified = info.ModTime()
