@@ -40,15 +40,17 @@ func main() {
 
 	if mode == 0 {
 		result, err = walkSync(dir, nil)
+		fmt.Println("reg")
 	} else if mode == 1 {
 		var wg sync.WaitGroup
 		result, err = walk(dir, &wg, nil)
 		wg.Wait()
-		fmt.Println("Async")
-	} else if mode == 3 {
+		fmt.Println("wait group")
+	} else if mode == 2 {
 		cNode := make(chan *Node, 1)
 		cErr := make(chan error, 1)
 		walkChan(dir, nil, cNode, cErr)
+		fmt.Println("chans")
 		result = <-cNode
 		//err = <-cErr
 		// for {
