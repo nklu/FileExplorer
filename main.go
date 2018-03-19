@@ -29,22 +29,41 @@ type syncHelp struct {
 func main() {
 	dir := os.Args[1]
 	fileName := os.Args[2]
-	var doSync bool
+	var mode int64
 	var argErr error
-	if doSync, argErr = strconv.ParseBool(os.Args[3]); argErr != nil {
-		doSync = false
+	if mode, argErr = strconv.ParseInt(os.Args[3], 10, 32); argErr != nil {
+		mode = 0
 	}
 
 	var result *Node
 	var err error
 
-	if doSync {
+	if mode == 0 {
 		result, err = walkSync(dir, nil)
-	} else {
+	} else if mode == 1 {
 		var wg sync.WaitGroup
 		result, err = walk(dir, &wg, nil)
 		wg.Wait()
 		fmt.Println("Async")
+	} else if mode == 3 {
+		cNode := make(chan *Node, 1)
+		cErr := make(chan error, 1)
+		walkChan(dir, nil, cNode, cErr)
+		result = <-cNode
+		//err = <-cErr
+		// for {
+		// 	select {
+		// 	case result = <-cNode:
+		// 		break
+		// 	case err = <-cErr:
+		// 		break
+		// 	}
+		// }
+		// if err != nil {
+		// 	panic(err)
+		// }
+	} else {
+		return
 	}
 
 	if err != nil {
@@ -62,6 +81,55 @@ func main() {
 	}
 
 	fmt.Println("Successful")
+}
+
+func walkChan(dir string, myInfo os.FileInfo, cNode chan *Node, cErr chan error) {
+	info, err := ioutil.ReadDir(dir)
+	if err != nil {
+		cErr <- err
+		return
+	}
+
+	node := &Node{Name: dir}
+	if myInfo != nil {
+		node.getFileBaseData(myInfo)
+	}
+
+	cSubNode := make(chan *Node)
+	//cSubErr := make(chan err)
+	cDone := make(chan bool)
+
+	go func() {
+		for {
+			n, more := <-cSubNode
+			if more {
+				node.Children = append(node.Children, n)
+				node.Size += n.Size
+			} else {
+				cDone <- true
+				return
+			}
+		}
+	}()
+
+	for _, fileInfo := range info {
+		if fileInfo.IsDir() {
+			fullPath := path.Join(dir, fileInfo.Name())
+			walkChan(fullPath, fileInfo, cSubNode, cErr)
+
+			//addNodeAndData(node, dirNode, fileInfo)
+		} else {
+			fileNode := &Node{}
+			fileNode.getFileBaseData(fileInfo)
+			cSubNode <- fileNode
+			//addNodeAndData(node, fileNode, fileInfo)
+		}
+	}
+	close(cSubNode)
+	<-cDone
+
+	cNode <- node
+	//cErr <- nil
 }
 
 var mtx sync.Mutex
