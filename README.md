@@ -1,13 +1,17 @@
 # FileExplorer (work in progress)
 An Exercise with go to walk Directories and output a JSON tree.
 
-Testing three seperate walk methods
+**Walk methods**
 
-1. Regular 
-2. Wait Groups
-3. Channels
+0. Regular 
+1. Wait Groups
+2. Channels
 
+**Current Usage:**
+```
+./FileExplorer Directory OutputPath [0-2](Walk Method Above)
+```
 
-#TODO
+**TODO**
 1. Test
 2. Benchmark
